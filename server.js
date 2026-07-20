@@ -5,6 +5,7 @@ const cors = require('cors');
 const calendarRoutes = require('./routes/calendar');
 const taskRoutes = require('./routes/tasks');
 const pushRoutes = require('./routes/push');
+const { startScheduler } = require('./services/scheduler');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -24,6 +25,8 @@ app.use((error, req, res, next) => {
   console.error(error.message);
   res.status(500).json({ error: error.message || 'Internal server error' });
 });
+
+startScheduler();
 
 app.listen(PORT, () => {
   console.log(`NudgeAI server listening on port ${PORT}`);

@@ -3,6 +3,9 @@
  * before running more than one server instance or restarting the service.
  */
 const pushSubscriptions = [];
+const medicines = [];
+const events = [];
+const reminders = [];
 
 function addPushSubscription(subscription, type) {
   const endpoint = subscription.endpoint;
@@ -30,6 +33,9 @@ function removePushSubscription(endpoint) {
 
 module.exports = {
   pushSubscriptions,
+  medicines,
+  events,
+  reminders,
   addPushSubscription,
   removePushSubscription
 };
