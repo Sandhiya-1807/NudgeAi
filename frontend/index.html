@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#2563eb">
+  <link rel="manifest" href="/manifest.json">
+  <title>NudgeAI</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, system-ui, sans-serif; color: #172033; background: #f5f7fb; }
+    body { margin: 0; } main { max-width: 980px; margin: auto; padding: 24px; }
+    header { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 22px; }
+    h1, h2, h3, p { margin-top: 0; } h1 { margin-bottom: 4px; } h2 { font-size: 1.15rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+    section { background: white; border-radius: 14px; padding: 18px; box-shadow: 0 2px 10px #17203312; margin-bottom: 16px; }
+    button { border: 0; border-radius: 8px; padding: 10px 14px; background: #2563eb; color: white; cursor: pointer; font: inherit; }
+    button:disabled { opacity: .55; cursor: not-allowed; } .secondary { background: #e8eefc; color: #1745a0; }
+    .muted { color: #64748b; font-size: .92rem; } .status { font-size: .88rem; margin: 8px 0 0; }
+    ul { list-style: none; padding: 0; margin: 0; } li { border-top: 1px solid #edf0f5; padding: 12px 0; }
+    li:first-child { border-top: 0; padding-top: 0; } .nudge { color: #35527d; margin: 5px 0 0; }
+    label { display: block; font-size: .88rem; font-weight: 600; margin: 10px 0 4px; }
+    input, select { box-sizing: border-box; width: 100%; border: 1px solid #cbd5e1; border-radius: 7px; padding: 9px; font: inherit; }
+    .medicine { border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin-top: 10px; }
+    .medicine-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+    .unclear { border-color: #dc2626; background: #fff1f2; } .verify { display: block; color: #b91c1c; font-size: .75rem; font-weight: 700; margin-top: 3px; }
+    #alarm-overlay { display: none; position: fixed; inset: 0; z-index: 10; background: #172033f2; color: white; align-items: center; justify-content: center; text-align: center; padding: 28px; }
+    #alarm-overlay.visible { display: flex; } .alarm-card { max-width: 580px; } .alarm-card h2 { font-size: clamp(2rem, 7vw, 4.5rem); margin-bottom: 16px; } .alarm-card p { font-size: 1.35rem; line-height: 1.45; }
+    #done-button { background: #22c55e; color: #09200f; font-size: 1.35rem; font-weight: 800; padding: 18px 42px; margin-top: 18px; }
+    @media (max-width: 600px) { main { padding: 16px; } header { align-items: flex-start; flex-direction: column; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div><h1>NudgeAI</h1><p class="muted">Care reminders for the day ahead.</p></div>
+      <div><button id="enable-notifications" class="secondary">Enable notifications</button><p id="push-status" class="status muted"></p></div>
+    </header>
+
+    <div class="grid">
+      <section><h2>Upcoming calendar</h2><ul id="events"><li class="muted">Loading events…</li></ul></section>
+      <section><h2>Pending tasks</h2><ul id="tasks"><li class="muted">Loading tasks…</li></ul></section>
+    </div>
+
+    <section>
+      <h2>Prescription</h2>
+      <p class="muted">Upload a prescription image, then verify the extracted details before activating reminders.</p>
+      <label for="prescription-image">Prescription image</label>
+      <input id="prescription-image" type="file" accept="image/*">
+      <button id="upload-prescription" type="button" style="margin-top:10px">Extract medicines</button>
+      <p id="upload-status" class="status muted"></p>
+      <div id="medicines"></div>
+      <div id="confirm-controls" hidden>
+        <label for="language">Reminder language</label>
+        <select id="language"><option value="ta">Tamil</option><option value="hi">Hindi</option><option value="en" selected>English</option></select>
+        <button id="confirm-prescription" type="button" style="margin-top:12px">Confirm &amp; Activate</button>
+      </div>
+    </section>
+
+    <section><h2>Live reminders</h2><ul id="reminders"><li class="muted">No reminders have fired yet.</li></ul></section>
+  </main>
+
+  <div id="alarm-overlay" role="alertdialog" aria-modal="true" aria-labelledby="alarm-title">
+    <div class="alarm-card"><h2 id="alarm-title">Reminder</h2><p id="alarm-message"></p><button id="done-button" type="button">Done</button></div>
+  </div>
+
+  <script>
+    const state = { medicines: [], knownReminderIds: new Set(), activeReminder: null, audioContext: null, alarmTimer: null };
+    const $ = (id) => document.getElementById(id);
+    const fieldNames = ['name', 'dosage', 'frequency', 'timing', 'duration'];
+
+    function escapeHtml(value = '') { return String(value).replace(/[&<>'"]/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' })[char]); }
+    function renderList(id, items, render, emptyText) { $(id).innerHTML = items.length ? items.map(render).join('') : `<li class="muted">${emptyText}</li>`; }
+    function formatDate(value) { const date = new Date(value); return Number.isNaN(date.valueOf()) ? '' : date.toLocaleString(); }
+
+    async function loadDashboard() {
+      const [eventsResult, tasksResult] = await Promise.allSettled([fetch('/api/calendar/events'), fetch('/api/tasks')]);
+      const events = eventsResult.status === 'fulfilled' && eventsResult.value.ok ? await eventsResult.value.json() : [];
+      const tasks = tasksResult.status === 'fulfilled' && tasksResult.value.ok ? await tasksResult.value.json() : [];
+      renderList('events', events, (event) => `<li><strong>${escapeHtml(event.title)}</strong><div class="muted">${formatDate(event.startTime)}</div><p class="nudge">${escapeHtml(event.leaveByNudge || event.nudge || 'Leave-by nudge will appear here when available.')}</p></li>`, 'No upcoming events.');
+      renderList('tasks', tasks.filter((task) => !task.completed), (task) => `<li><strong>${escapeHtml(task.title)}</strong>${task.dueDate ? `<div class="muted">Due ${formatDate(task.dueDate)}</div>` : ''}<p class="nudge">${escapeHtml(task.leaveByNudge || task.nudge || 'Plan a little time for this task.')}</p></li>`, 'No pending tasks.');
+    }
+
+    function urlBase64ToUint8Array(value) { const padded = value + '='.repeat((4 - value.length % 4) % 4); const raw = atob(padded.replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(raw, (char) => char.charCodeAt(0)); }
+    async function enablePush() {
+      const status = $('push-status');
+      try {
+        if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error('Push is not supported in this browser.');
+        const registration = await navigator.serviceWorker.register('/service-worker.js');
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') throw new Error('Notification permission was not granted.');
+        const { publicKey } = await fetch('/api/push/vapid-public-key').then((response) => { if (!response.ok) throw new Error('Unable to fetch push key.'); return response.json(); });
+        const subscription = await registration.pushManager.getSubscription() || await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
+        const response = await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription, type: 'elder' }) });
+        if (!response.ok) throw new Error('Unable to register this device for push.');
+        const { subscriptionId } = await response.json();
+        localStorage.setItem('nudgeaiElderSubscriptionId', subscriptionId);
+        status.textContent = 'Notifications are enabled on this device.';
+        $('enable-notifications').disabled = true;
+      } catch (error) { status.textContent = error.message; }
+    }
+
+    function isUnclear(value) { return String(value || '').trim().toLowerCase() === 'unclear'; }
+    function renderMedicines() {
+      $('medicines').innerHTML = state.medicines.map((medicine, index) => `<div class="medicine"><h3>Medicine ${index + 1}</h3><div class="medicine-grid">${fieldNames.map((field) => { const unclear = isUnclear(medicine[field]); return `<div><label>${field}</label><input data-index="${index}" data-field="${field}" value="${escapeHtml(medicine[field] || '')}" class="${unclear ? 'unclear' : ''}"><span class="verify"${unclear ? '' : ' hidden'}>Please verify</span></div>`; }).join('')}</div></div>`).join('');
+      $('confirm-controls').hidden = state.medicines.length === 0;
+      document.querySelectorAll('#medicines input').forEach((input) => input.addEventListener('input', (event) => { state.medicines[event.target.dataset.index][event.target.dataset.field] = event.target.value; const unclear = isUnclear(event.target.value); event.target.classList.toggle('unclear', unclear); const note = event.target.nextElementSibling; if (note?.classList.contains('verify')) note.hidden = !unclear; }));
+    }
+
+    async function uploadPrescription() {
+      const file = $('prescription-image').files[0]; const status = $('upload-status');
+      if (!file) { status.textContent = 'Choose an image first.'; return; }
+      const form = new FormData(); form.append('image', file); status.textContent = 'Extracting medicines…';
+      try { const response = await fetch('/api/prescriptions/upload', { method: 'POST', body: form }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Extraction failed.'); state.medicines = data.medicines || []; renderMedicines(); status.textContent = 'Review and correct every highlighted field.'; }
+      catch (error) { status.textContent = error.message; }
+    }
+
+    async function confirmPrescription() {
+      const subscriptionId = localStorage.getItem('nudgeaiElderSubscriptionId'); const status = $('upload-status');
+      if (!subscriptionId) { status.textContent = 'Enable notifications on the elder device before activating reminders.'; return; }
+      try { const response = await fetch('/api/prescriptions/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ medicines: state.medicines, languageCode: $('language').value, elderPushSubscriptionId: subscriptionId }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Unable to activate reminders.'); state.medicines = []; renderMedicines(); status.textContent = `${data.medicines.length} medicine reminder(s) activated.`; }
+      catch (error) { status.textContent = error.message; }
+    }
+
+    function startAlarmSound() { try { state.audioContext = new (window.AudioContext || window.webkitAudioContext)(); const beep = () => { const oscillator = state.audioContext.createOscillator(); const gain = state.audioContext.createGain(); oscillator.frequency.value = 880; gain.gain.setValueAtTime(.12, state.audioContext.currentTime); gain.gain.exponentialRampToValueAtTime(.001, state.audioContext.currentTime + .45); oscillator.connect(gain).connect(state.audioContext.destination); oscillator.start(); oscillator.stop(state.audioContext.currentTime + .45); }; beep(); state.alarmTimer = setInterval(beep, 1000); } catch (_) {} }
+    function stopAlarmSound() { clearInterval(state.alarmTimer); state.alarmTimer = null; if (state.audioContext) state.audioContext.close(); state.audioContext = null; if ('speechSynthesis' in window) speechSynthesis.cancel(); }
+    function showAlarm(reminder) { state.activeReminder = reminder; $('alarm-title').textContent = reminder.sourceType === 'medicine' ? 'Medicine reminder' : 'Event reminder'; $('alarm-message').textContent = reminder.message || (reminder.sourceType === 'medicine' ? `It is time to take your ${reminder.medicineName}.` : reminder.eventTitle); $('alarm-overlay').classList.add('visible'); startAlarmSound(); if (reminder.sourceType === 'medicine' && 'speechSynthesis' in window) { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(reminder.message || `It is time to take your ${reminder.medicineName}.`)); } }
+    async function loadReminders(initial = false) { try { const response = await fetch('/api/reminders'); if (!response.ok) throw new Error(); const reminders = await response.json(); renderList('reminders', reminders.slice().reverse(), (reminder) => `<li><strong>${escapeHtml(reminder.message || reminder.medicineName || reminder.eventTitle || 'Reminder')}</strong><div class="muted">${formatDate(reminder.firedAt)} · ${reminder.confirmedAt ? 'Done' : 'Awaiting confirmation'}</div></li>`, 'No reminders have fired yet.'); const newReminder = reminders.find((reminder) => !state.knownReminderIds.has(reminder.id)); reminders.forEach((reminder) => state.knownReminderIds.add(reminder.id)); if (!initial && newReminder && !state.activeReminder) showAlarm(newReminder); } catch (_) { $('reminders').innerHTML = '<li class="muted">Unable to load reminders.</li>'; } }
+    async function completeActiveReminder() { if (!state.activeReminder) return; const id = state.activeReminder.id; try { const response = await fetch(`/api/reminders/${encodeURIComponent(id)}/confirm`, { method: 'POST' }); if (!response.ok) throw new Error('Unable to confirm reminder.'); } finally { stopAlarmSound(); $('alarm-overlay').classList.remove('visible'); state.activeReminder = null; loadReminders(); } }
+
+    $('enable-notifications').addEventListener('click', enablePush); $('upload-prescription').addEventListener('click', uploadPrescription); $('confirm-prescription').addEventListener('click', confirmPrescription); $('done-button').addEventListener('click', completeActiveReminder);
+    window.addEventListener('load', async () => { await enablePush(); await loadDashboard(); await loadReminders(true); setInterval(() => loadReminders(), 10000); });
+  </script>
+</body>
+</html>

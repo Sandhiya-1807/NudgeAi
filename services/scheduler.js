@@ -45,7 +45,7 @@ async function notify(type, payload, subscriptionId) {
   });
 }
 
-function addReminder({ sourceType, sourceId, scheduledFor, personName, medicineName, eventTitle, firedAt }) {
+function addReminder({ sourceType, sourceId, scheduledFor, personName, medicineName, eventTitle, message, firedAt }) {
   const reminder = {
     id: crypto.randomUUID(),
     sourceType,
@@ -54,6 +54,7 @@ function addReminder({ sourceType, sourceId, scheduledFor, personName, medicineN
     personName,
     medicineName,
     eventTitle,
+    message,
     firedAt: firedAt.toISOString(),
     confirmedAt: null,
     escalated: false
@@ -86,9 +87,10 @@ async function fireMedicineReminders(now) {
     const scheduledFor = `${date}T${time}`;
     if (alreadyFired('medicine', sourceId, scheduledFor)) continue;
 
+    const message = medicineMessage(medicine);
     await notify('elder', {
       title: 'Medicine reminder',
-      body: medicineMessage(medicine),
+      body: message,
       vibrate: ELDER_VIBRATION,
       data: { reminderType: 'medicine', medicineId: medicine.id }
     }, medicine.elderPushSubscriptionId);
@@ -98,6 +100,7 @@ async function fireMedicineReminders(now) {
       scheduledFor,
       personName: medicine.personName || store.personName || 'They',
       medicineName: medicine.name,
+      message,
       firedAt: now
     });
   }
@@ -154,6 +157,7 @@ async function fireEventReminders(now) {
       scheduledFor,
       personName: event.personName || store.personName || 'They',
       eventTitle: title,
+      message,
       firedAt: now
     });
   }
