@@ -29,12 +29,14 @@ function timingMatches(timing, now) {
   return times.some((time) => normalizeTime(time) === currentTime(now));
 }
 
-function matchingSubscriptions(type) {
-  return store.pushSubscriptions.filter((entry) => entry.type === type);
+function matchingSubscriptions(type, subscriptionId) {
+  return store.pushSubscriptions.filter(
+    (entry) => entry.type === type && (!subscriptionId || entry.id === subscriptionId)
+  );
 }
 
-async function notify(type, payload) {
-  const subscriptions = matchingSubscriptions(type);
+async function notify(type, payload, subscriptionId) {
+  const subscriptions = matchingSubscriptions(type, subscriptionId);
   const results = await Promise.allSettled(
     subscriptions.map((entry) => sendPushNotification(entry.subscription, payload))
   );
@@ -89,7 +91,7 @@ async function fireMedicineReminders(now) {
       body: medicineMessage(medicine),
       vibrate: ELDER_VIBRATION,
       data: { reminderType: 'medicine', medicineId: medicine.id }
-    });
+    }, medicine.elderPushSubscriptionId);
     addReminder({
       sourceType: 'medicine',
       sourceId,

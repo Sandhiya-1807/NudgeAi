@@ -5,6 +5,8 @@ const cors = require('cors');
 const calendarRoutes = require('./routes/calendar');
 const taskRoutes = require('./routes/tasks');
 const pushRoutes = require('./routes/push');
+const prescriptionRoutes = require('./routes/prescriptions');
+const reminderRoutes = require('./routes/reminders');
 const { startScheduler } = require('./services/scheduler');
 
 const app = express();
@@ -16,6 +18,8 @@ app.use(express.static('frontend'));
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/push', pushRoutes);
+app.use('/api/prescriptions', prescriptionRoutes);
+app.use('/api/reminders', reminderRoutes);
 
 app.get('/', (req, res) => {
   res.status(200).json({ status: 'ok', service: 'NudgeAI' });

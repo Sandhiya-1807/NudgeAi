@@ -23,8 +23,8 @@ router.post('/subscribe', (req, res) => {
     return res.status(400).json({ error: "type must be either 'elder' or 'family'." });
   }
 
-  addPushSubscription(subscription, type);
-  return res.status(201).json({ status: 'subscribed', type });
+  const record = addPushSubscription(subscription, type);
+  return res.status(201).json({ status: 'subscribed', type, subscriptionId: record.id });
 });
 
 module.exports = router;
