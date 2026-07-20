@@ -1,6 +1,7 @@
 const { google } = require('googleapis');
 
 const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
+const TASKS_SCOPE = 'https://www.googleapis.com/auth/tasks.readonly';
 // Mock data is enabled unless explicitly disabled for a real OAuth connection.
 const USE_MOCK_DATA = process.env.USE_MOCK_DATA !== 'false';
 
@@ -21,7 +22,7 @@ function getOAuth2Client() {
 function getAuthUrl() {
   return getOAuth2Client().generateAuthUrl({
     access_type: 'offline',
-    scope: [CALENDAR_SCOPE],
+    scope: [CALENDAR_SCOPE, TASKS_SCOPE],
     prompt: 'consent'
   });
 }
@@ -77,8 +78,58 @@ async function fetchUpcomingEvents() {
   }));
 }
 
+function getMockTasks() {
+  return [
+    {
+      id: 'mock-task-1',
+      title: 'Review tomorrow\'s calendar',
+      dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      completed: false
+    },
+    {
+      id: 'mock-task-2',
+      title: 'Pick up groceries',
+      dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+      completed: false
+    },
+    {
+      id: 'mock-task-3',
+      title: 'Send project update',
+      dueDate: null,
+      completed: true
+    }
+  ];
+}
+
+async function fetchTasks() {
+  if (USE_MOCK_DATA) {
+    return getMockTasks();
+  }
+
+  const client = getOAuth2Client();
+  if (!client.credentials.access_token) {
+    throw new Error('Google Tasks is not connected. Exchange an OAuth authorization code first.');
+  }
+
+  const tasks = google.tasks({ version: 'v1', auth: client });
+  const { data } = await tasks.tasks.list({
+    tasklist: '@default',
+    maxResults: 100,
+    showCompleted: true,
+    showHidden: false
+  });
+
+  return (data.items || []).map((task) => ({
+    id: task.id,
+    title: task.title || 'Untitled task',
+    dueDate: task.due || null,
+    completed: task.status === 'completed'
+  }));
+}
+
 module.exports = {
   fetchUpcomingEvents,
+  fetchTasks,
   getAuthUrl,
   setTokenFromCode
 };

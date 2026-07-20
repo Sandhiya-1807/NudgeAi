@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const calendarRoutes = require('./routes/calendar');
+const taskRoutes = require('./routes/tasks');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,6 +11,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use('/api/calendar', calendarRoutes);
+app.use('/api/tasks', taskRoutes);
 
 app.get('/', (req, res) => {
   res.status(200).json({ status: 'ok', service: 'NudgeAI' });
