@@ -1,0 +1,10 @@
+{
+  "name": "NudgeAI",
+  "short_name": "NudgeAI",
+  "description": "Helpful reminders and care coordination.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb"
+}

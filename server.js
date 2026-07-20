@@ -4,14 +4,17 @@ const express = require('express');
 const cors = require('cors');
 const calendarRoutes = require('./routes/calendar');
 const taskRoutes = require('./routes/tasks');
+const pushRoutes = require('./routes/push');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+app.use(express.static('frontend'));
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/tasks', taskRoutes);
+app.use('/api/push', pushRoutes);
 
 app.get('/', (req, res) => {
   res.status(200).json({ status: 'ok', service: 'NudgeAI' });
