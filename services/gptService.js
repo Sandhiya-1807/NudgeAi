@@ -55,6 +55,30 @@ async function generateLeaveByNudge({ eventTitle, leaveByTime, travelMinutes, we
   return limitWords(response.output_text || 'It’s time to plan your departure.');
 }
 
+async function generateTranslatedReminder(medicineName, languageCode) {
+  if (!medicineName || !languageCode) {
+    throw new Error('medicineName and languageCode are required.');
+  }
+
+  const phrase = `It is time to take your ${medicineName}`;
+  const response = await getClient().responses.create({
+    model: MODEL,
+    max_output_tokens: 80,
+    instructions: [
+      'Translate the supplied reminder into the requested language.',
+      'Return only the translated sentence as plain text, without quotation marks, labels, or explanations.'
+    ].join(' '),
+    input: JSON.stringify({ phrase, languageCode })
+  });
+
+  const translation = response.output_text?.trim();
+  if (!translation) {
+    throw new Error('The translation service returned an empty response.');
+  }
+
+  return translation;
+}
+
 function toImageDataUrl(base64Image) {
   if (!base64Image || typeof base64Image !== 'string') {
     throw new Error('base64Image must be a non-empty base64-encoded image string.');
@@ -104,5 +128,6 @@ async function extractPrescriptionFromImage(base64Image) {
 
 module.exports = {
   extractPrescriptionFromImage,
-  generateLeaveByNudge
+  generateLeaveByNudge,
+  generateTranslatedReminder
 };
