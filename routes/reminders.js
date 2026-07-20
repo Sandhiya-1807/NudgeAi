@@ -9,6 +9,9 @@ router.get('/', (req, res) => {
 });
 
 router.post('/:id/confirm', (req, res) => {
+  if (typeof req.params.id !== 'string' || !req.params.id.trim()) {
+    return res.status(400).json({ error: 'A reminder id is required.' });
+  }
   const reminder = confirmReminder(req.params.id);
   if (!reminder) {
     return res.status(404).json({ error: 'Reminder not found.' });

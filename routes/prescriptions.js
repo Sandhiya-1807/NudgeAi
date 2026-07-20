@@ -28,6 +28,9 @@ router.post('/upload', upload.single('image'), async (req, res, next) => {
 
 router.post('/confirm', async (req, res, next) => {
   try {
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      return res.status(400).json({ error: 'A JSON request body is required.' });
+    }
     const { medicines, languageCode } = req.body || {};
     const elderPushSubscriptionId = req.body?.elderPushSubscriptionId || req.body?.elderSubscriptionId;
     if (!Array.isArray(medicines) || medicines.length === 0) {

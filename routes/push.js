@@ -14,9 +14,19 @@ router.get('/vapid-public-key', (req, res, next) => {
 });
 
 router.post('/subscribe', (req, res) => {
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({ error: 'A JSON request body is required.' });
+  }
   const { subscription, type } = req.body || {};
 
-  if (!subscription || typeof subscription.endpoint !== 'string' || !subscription.endpoint) {
+  if (
+    !subscription ||
+    typeof subscription.endpoint !== 'string' ||
+    !subscription.endpoint ||
+    !subscription.keys ||
+    typeof subscription.keys.p256dh !== 'string' ||
+    typeof subscription.keys.auth !== 'string'
+  ) {
     return res.status(400).json({ error: 'A valid push subscription is required.' });
   }
   if (!subscriptionTypes.has(type)) {
